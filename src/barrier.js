@@ -32,6 +32,83 @@ MG.BARRIER_PATH_IDS[MG.BarrierType.BLANK] = 'barrier-path-blank';
 MG.BARRIER_PATH_IDS[MG.BarrierType.START] = 'barrier-path-blank';
 MG.BARRIER_PATH_IDS[MG.BarrierType.FINISH] = 'barrier-path-finish';
 
+MG.BARRIER_COLLISION_FUNCTIONS = (function () {
+    var epsilon = 0.01;
+
+    function polar(p) {
+        return [
+            Math.sqrt(Math.pow(p[0], 2) + Math.pow(p[1], 2)),
+            Math.atan2(p[1], p[0])
+        ];
+    }
+
+    function dpoints(p1, p2) {
+        return Math.sqrt(Math.pow(p1[0] - p2[0], 2) +
+                         Math.pow(p1[1] - p2[1], 2));
+    }
+
+    function dcenter(p) {
+        return dpoints([0, 0], p);
+    }
+
+    function cc(f) {
+        if(typeof f === 'function') {
+            return function(x, y) {
+                return (dcenter([x, y]) >= (80 - epsilon) || f(x, y));
+            };
+        } else {
+            return null;
+        }
+    }
+
+    return [
+        null,
+        function (x, y) {
+            return (dcenter([x, y]) < 30 ||
+                    (y < 0 && x > 0) ||
+                    (y > 0 && x < 0));
+        },
+        function (x, y) {
+            return [
+                [50, 0],
+                [-25, 43.300],
+                [-25, -43.300]
+            ].every(function(v) {
+                return dpoints(v, [x, y]) > 30;
+            });
+        },
+        function (x, y) {
+            return (dcenter([x, y]) > 30 &&
+                    (x < 0 || y < 0));
+        },
+        function (x, y) {
+            var angle = polar([x, y])[1];
+            return (dcenter([x, y]) < 30 ||
+                    angle < 0 ||
+                    angle > polar([-30.780, 84.570])[1]);
+        },
+        function (x, y) {
+            return ((Math.abs(x) < 45) &&
+                    (dpoints([81.92, 0], [Math.abs(x), y]) > 58));
+        },
+        function (x, y) {
+            return (Math.abs(x) > 80 ||
+                    Math.abs(y) > 25);
+        },
+        function (x, y) {
+            return ;
+        }
+    ].map(cc);
+
+    colliders.finish = cc(function(x, y) {
+        var angle = polar([x, y])[1];
+        return (dcenter([x, y]) > 75 &&
+                ((y < 0 && angle < polar([53.030, 53.030])[1]) ||
+                 (y > 0 && angle < polar([-53.030, -53.030])[1])));
+    });
+
+    return colliders;
+})();
 
 MG.Barrier = function (type) {
     if (type === undefined) {type = MG.BarrierType.RANDOM;}
@@ -83,24 +160,11 @@ MG.Barrier = function (type) {
         var x_ =    x * Math.cos(mTheta*Math.PI/180) + y * Math.sin(mTheta*Math.PI/180);
         var y_ = -x * Math.sin(mTheta*Math.PI/180) + y * Math.cos(mTheta*Math.PI/180);
 
-        /* the line to be used for finding the intersections should already exist
-        but needs to be made to the point to the point that is to be tested */
-        var lineNode = document.getElementById('collision-line');
-        lineNode.setAttribute('x2', x_);
-        lineNode.setAttribute('y2', y_);
-
-        /* As the barriers path may not have been created yet, the original path is used */
-        var pathNode = document.getElementById(MG.BARRIER_PATH_IDS[mType]);
-
-
-        /* `Line` and `Path` are both part of Kevin Lindsey's svg geometry library. */
-        /* `Path` has been hacked to properly support elliptical arc segments. */
-        var line = new Line(lineNode);
-        var path = new Path(pathNode);
-
-        var intersections = new Intersection.intersectShapes(path, line);
-
-        return intersections.points.length % 2 === 1;
+        if(MG.BARRIER_COLLISION_FUNCTIONS[mType]) {
+            return MG.BARRIER_COLLISION_FUNCTIONS[mType](x_, y_);
+        } else {
+            return false;
+        }
     };
 
 
